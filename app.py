@@ -115,7 +115,7 @@ def index():
 
 # -------- UI --------
 @app.get("/chart")
-def chart
+def chart():
     return render_template("chart.html")
 
 if __name__ == "__main__":
