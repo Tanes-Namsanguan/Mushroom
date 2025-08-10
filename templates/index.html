@@ -3,132 +3,80 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{{ title }}</title>
+  <title>Data Table View</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
   <style>
-    :root { --fg:#0f172a; --muted:#64748b; --bg:#f8fafc; --card:#ffffff; }
-    *{ box-sizing:border-box; }
-    body{ margin:0; font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial; color:var(--fg); background:var(--bg); }
-    .wrap{ max-width:920px; margin:40px auto; padding:0 16px; }
-    .card{ background:var(--card); border-radius:16px; padding:20px; box-shadow:0 1px 8px rgba(15,23,42,.06); }
-    .row{ display:flex; gap:16px; flex-wrap:wrap; }
-    .row > *{ flex:1 1 280px; }
-    .muted{ color:var(--muted); }
-    .kbd{ font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background:#e2e8f0; padding:2px 6px; border-radius:6px; font-size:12px; }
-    .input{ width:100%; padding:10px 12px; border:1px solid #e2e8f0; border-radius:10px; }
-    button{ padding:10px 14px; border:0; border-radius:12px; background:#0ea5e9; color:white; font-weight:600; cursor:pointer; }
-    button:disabled{ background:#94a3b8; cursor:not-allowed; }
+    body { font-family: Inter, sans-serif; background: #f8fafc; color: #0f172a; margin: 0; padding: 20px; }
+    h1 { margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+    th, td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+    th { background: #f1f5f9; }
+    tr:hover { background: #f9fafb; }
+    .muted { color: #64748b; font-size: 0.9em; }
+    #refresh { margin-bottom: 15px; padding: 8px 14px; border: none; border-radius: 6px; background: #0ea5e9; color: white; cursor: pointer; }
+    #refresh:hover { background: #0284c7; }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1 style="margin:0 0 6px">{{ title }}</h1>
-    <div class="muted" style="margin-bottom:18px">Simple time-series ingest & chart</div>
-
-    <div class="card" style="margin-bottom:16px">
-      <div class="row">
-        <div>
-          <label class="muted">Manual add value</label>
-          <div style="display:flex; gap:8px; margin-top:6px">
-            <input id="val" class="input" type="number" step="any" placeholder="e.g. 42.5" />
-            <input id="meta" class="input" placeholder="meta JSON (optional)" />
-            <button id="btn">Add</button>
-          </div>
-          <div class="muted" style="margin-top:6px">curl: <span class="kbd">curl -X POST /api/ingest -H 'Content-Type: application/json' -d '{"value":12.3}'</span></div>
-        </div>
-        <div>
-          <label class="muted">Auto refresh</label>
-          <div style="display:flex; gap:8px; margin-top:6px; align-items:center">
-            <select id="interval" class="input">
-              <option value="0">Off</option>
-              <option value="5">5s</option>
-              <option value="15">15s</option>
-              <option value="60">60s</option>
-            </select>
-            <button id="refresh">Refresh now</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <canvas id="chart" height="120"></canvas>
-    </div>
-  </div>
+  <h1>Data Table View</h1>
+  <button id="refresh">Refresh Now</button>
+  <table id="data-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Timestamp (UTC)</th>
+        <th>Value</th>
+        <th>Meta</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td colspan="4" class="muted">Loading...</td></tr>
+    </tbody>
+  </table>
 
   <script>
-  const apiKey = null; // ใส่ string ถ้าตั้ง API_KEY ฝั่งเซิร์ฟเวอร์ เช่น "mysecret"
-  const refreshIntervalSec = 5; // ตั้งค่า refresh interval (วินาที)
+    async function fetchData() {
+      const res = await fetch('/api/data');
+      const data = await res.json();
+      return data;
+    }
 
-  async function fetchData() {
-    const res = await fetch('/api/data');
-    const data = await res.json();
-    return data.map(d => ({
-      x: new Date(d.ts),
-      y: d.value
-    }));
-  }
-
-  async function postValue(value, meta) {
-    const res = await fetch('/api/ingest', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(apiKey ? { 'X-API-Key': apiKey } : {})
-      },
-      body: JSON.stringify({ value, meta })
-    });
-    if (!res.ok) throw new Error(await res.text());
-    return res.json();
-  }
-
-  let chart;
-  async function render() {
-    const points = await fetchData();
-    const ctx = document.getElementById('chart');
-    const ds = [{
-      label: 'value',
-      data: points,
-      parsing: false,
-      borderWidth: 2,
-      tension: 0.2
-    }];
-    const cfg = {
-      type: 'line',
-      data: { datasets: ds },
-      options: {
-        animation: false,
-        scales: {
-          x: { type: 'time', time: { unit: 'minute' } },
-          y: { beginAtZero: true }
-        },
-        plugins: { legend: { display: true } }
+    function renderTable(data) {
+      const tbody = document.querySelector('#data-table tbody');
+      tbody.innerHTML = '';
+      if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="muted">No data available</td></tr>';
+        return;
       }
-    };
-    if (chart) chart.destroy();
-    await import('https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js');
-    await import('https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js');
-    chart = new Chart(ctx, cfg);
-  }
+      data.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${row.id}</td>
+          <td>${new Date(row.ts).toISOString()}</td>
+          <td>${row.value}</td>
+          <td>${row.meta ? JSON.stringify(row.meta) : ''}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
 
-  document.getElementById('btn').addEventListener('click', async () => {
-    const v = parseFloat(document.getElementById('val').value);
-    const mraw = document.getElementById('meta').value.trim();
-    const meta = mraw ? JSON.parse(mraw) : undefined;
-    if (Number.isNaN(v)) return alert('Please input a number');
-    try { await postValue(v, meta); await render(); } catch (e) { alert(e.message); }
-  });
+    async function loadAndRender() {
+      try {
+        const data = await fetchData();
+        renderTable(data);
+      } catch (err) {
+        console.error(err);
+      }
+    }
 
-  document.getElementById('refresh').addEventListener('click', render);
+    document.getElementById('refresh').addEventListener('click', loadAndRender);
 
-  // เริ่ม render ทันที
-  render();
-  // ตั้ง auto refresh
-  setInterval(render, refreshIntervalSec * 1000);
-</script>
-
+    // โหลดครั้งแรก
+    loadAndRender();
+    // อัปเดตอัตโนมัติทุก 5 วินาที
+    setInterval(loadAndRender, 5000);
+  </script>
 </body>
 </html>
