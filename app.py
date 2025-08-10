@@ -113,5 +113,10 @@ def api_data():
 def index():
     return render_template("index.html", title=APP_TITLE)
 
+# -------- UI --------
+@app.get("/chart")
+def chart
+    return render_template("chart.html")
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
