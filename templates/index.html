@@ -60,57 +60,75 @@
   </div>
 
   <script>
-    const apiKey = null; // ใส่ string ถ้าตั้ง API_KEY ฝั่งเซิร์ฟเวอร์ เช่น "mysecret"
+  const apiKey = null; // ใส่ string ถ้าตั้ง API_KEY ฝั่งเซิร์ฟเวอร์ เช่น "mysecret"
+  const refreshIntervalSec = 5; // ตั้งค่า refresh interval (วินาที)
 
-    async function fetchData() {
-      const res = await fetch('/api/data');
-      const data = await res.json();
-      return data.map(d => ({ x: new Date(d.ts), y: d.value }));
-    }
+  async function fetchData() {
+    const res = await fetch('/api/data');
+    const data = await res.json();
+    return data.map(d => ({
+      x: new Date(d.ts),
+      y: d.value
+    }));
+  }
 
-    async function postValue(value, meta) {
-      const res = await fetch('/api/ingest', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(apiKey ? { 'X-API-Key': apiKey } : {})
+  async function postValue(value, meta) {
+    const res = await fetch('/api/ingest', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(apiKey ? { 'X-API-Key': apiKey } : {})
+      },
+      body: JSON.stringify({ value, meta })
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+
+  let chart;
+  async function render() {
+    const points = await fetchData();
+    const ctx = document.getElementById('chart');
+    const ds = [{
+      label: 'value',
+      data: points,
+      parsing: false,
+      borderWidth: 2,
+      tension: 0.2
+    }];
+    const cfg = {
+      type: 'line',
+      data: { datasets: ds },
+      options: {
+        animation: false,
+        scales: {
+          x: { type: 'time', time: { unit: 'minute' } },
+          y: { beginAtZero: true }
         },
-        body: JSON.stringify({ value, meta })
-      });
-      if (!res.ok) throw new Error(await res.text());
-      return res.json();
-    }
+        plugins: { legend: { display: true } }
+      }
+    };
+    if (chart) chart.destroy();
+    await import('https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js');
+    await import('https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js');
+    chart = new Chart(ctx, cfg);
+  }
 
-    let chart;
-    async function render() {
-      const points = await fetchData();
-      const ctx = document.getElementById('chart');
-      const ds = [{ label: 'value', data: points, parsing: false, borderWidth: 2, tension: 0.2 }];
-      const cfg = { type: 'line', data: { datasets: ds }, options: { animation: false, scales: { x: { type: 'time', time: { unit: 'minute' } }, y: { beginAtZero: true } }, plugins: { legend: { display: true } } } };
-      if (chart) chart.destroy();
-      await import('https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js');
-      await import('https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js');
-      chart = new Chart(ctx, cfg);
-    }
+  document.getElementById('btn').addEventListener('click', async () => {
+    const v = parseFloat(document.getElementById('val').value);
+    const mraw = document.getElementById('meta').value.trim();
+    const meta = mraw ? JSON.parse(mraw) : undefined;
+    if (Number.isNaN(v)) return alert('Please input a number');
+    try { await postValue(v, meta); await render(); } catch (e) { alert(e.message); }
+  });
 
-    document.getElementById('btn').addEventListener('click', async () => {
-      const v = parseFloat(document.getElementById('val').value);
-      const mraw = document.getElementById('meta').value.trim();
-      const meta = mraw ? JSON.parse(mraw) : undefined;
-      if (Number.isNaN(v)) return alert('Please input a number');
-      try { await postValue(v, meta); await render(); } catch (e) { alert(e.message); }
-    });
+  document.getElementById('refresh').addEventListener('click', render);
 
-    document.getElementById('refresh').addEventListener('click', render);
+  // เริ่ม render ทันที
+  render();
+  // ตั้ง auto refresh
+  setInterval(render, refreshIntervalSec * 1000);
+</script>
 
-    let timer = null;
-    document.getElementById('interval').addEventListener('change', (e) => {
-      if (timer) { clearInterval(timer); timer = null; }
-      const sec = parseInt(e.target.value, 10);
-      if (sec > 0) { timer = setInterval(render, sec * 1000); }
-    });
-
-    render();
-  </script>
 </body>
 </html>
